@@ -134,7 +134,7 @@ def compute_report(snapshots):
 
 def main():
     parser = argparse.ArgumentParser(description="番茄小说排行榜本地抓取脚本 (Python)")
-    parser.add_argument("--max", type=int, help="每个分类最大抓取数量")
+    parser.add_argument("--max", type=int, default=50, help="每个分类最大抓取数量 (默认: 50)")
     parser.add_argument("--out", default="fanqie-snapshots.json", help="输出 JSON 文件路径")
     parser.add_argument("--upload-url", help="推送接口 URL (可选)")
     parser.add_argument("--key", help="推送接口鉴权密钥 (x-market-import-key)")
@@ -216,7 +216,9 @@ def main():
                 continue
             
             book_list = state.get("rank", {}).get("book_list", [])
-            if args.max:
+            
+            # 使用配置的最大抓取数量
+            if args.max and args.max > 0:
                 book_list = book_list[:args.max]
             
             books = []
