@@ -1,17 +1,21 @@
 import fs from "fs/promises";
 import { exportSnapshotsFromCategories } from "./fanqie-export.mjs";
 
-export async function pushSnapshotsPayload({ uploadUrl, payload, fetcher, token }) {
+export async function pushSnapshotsPayload({ uploadUrl, payload, fetcher, key, token }) {
   const headers = {
     "Content-Type": "application/json; charset=utf-8",
     Accept: "application/json",
   };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (key) {
+    headers["x-market-import-key"] = key;
+  } else if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
 
   const res = await fetcher(uploadUrl, {
     method: "POST",
     headers,
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ payload }),
   });
   return res;
 }
@@ -23,6 +27,7 @@ function parseArgs(argv) {
     out: "fanqie-snapshots.json",
     reportOut: "",
     uploadUrl: "",
+    key: "",
     token: "",
     verifyCover: false,
   };
@@ -33,6 +38,7 @@ function parseArgs(argv) {
     if (a === "--out") out.out = argv[i + 1] || out.out;
     if (a === "--report-out") out.reportOut = argv[i + 1] || "";
     if (a === "--upload-url") out.uploadUrl = argv[i + 1] || "";
+    if (a === "--key") out.key = argv[i + 1] || "";
     if (a === "--token") out.token = argv[i + 1] || "";
     if (a === "--verify-cover") out.verifyCover = true;
   }
@@ -55,7 +61,7 @@ async function loadCategories(filePath) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.uploadUrl) {
-    console.error("Usage: node scripts/fanqie-push.mjs --upload-url <url> [--token xxx] [--max 30]");
+    console.error("Usage: node scripts/fanqie-push.mjs --upload-url <url> [--key <secret>] [--max 30]");
     process.exit(1);
   }
 
@@ -79,10 +85,12 @@ async function main() {
   const reportOut = args.reportOut || args.out.replace(/\\.json$/i, ".report.json");
   await fs.writeFile(reportOut, JSON.stringify({ date, ...report }, null, 2), "utf8");
 
+  console.log(`Pushing data to ${args.uploadUrl} ...`);
   const res = await pushSnapshotsPayload({
     uploadUrl: args.uploadUrl,
     payload,
     fetcher: fetch,
+    key: args.key,
     token: args.token,
   });
 

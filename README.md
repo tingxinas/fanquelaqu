@@ -22,16 +22,32 @@ npm run fanqie:export -- --out fanqie-snapshots.json
 npm run fanqie:export -- --max 30 --out fanqie-snapshots.json
 ```
 
-## 2. 一键导出并 POST 上传（不手动上传文件）
+## 2. 抓取并自动 POST 到服务端
+
+使用 `fanqie:push` 脚本，抓取完成后自动通过 POST 接口推送给服务端。
 
 ```bash
-npm run fanqie:push -- --upload-url "https://你的后台上传接口" --out fanqie-snapshots.json
+# 本地测试
+npm run fanqie:push -- \
+  --upload-url "http://127.0.0.1:3000/api/admin/seed-bank/import-today/push" \
+  --key "你的密钥" \
+  --max 10
+
+# 线上推送
+npm run fanqie:push -- \
+  --upload-url "https://你的域名/api/admin/seed-bank/import-today/push" \
+  --key "你的密钥"
 ```
 
-如果接口需要 token：
+这会自动发送如下格式的请求体（Content-Type: application/json），并在 header 携带 `x-market-import-key: 你的密钥`：
 
-```bash
-npm run fanqie:push -- --upload-url "https://你的后台上传接口" --token "你的token"
+```json
+{
+  "payload": {
+    "date": "2026-04-14",
+    "snapshots": [...]
+  }
+}
 ```
 
 ## 3. 输出格式
