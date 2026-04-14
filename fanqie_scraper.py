@@ -284,16 +284,33 @@ def main():
         }
         if args.key:
             push_headers["x-market-import-key"] = args.key
+            print(f"✅ 已携带 x-market-import-key 认证头")
             
         try:
-            res = requests.post(args.upload_url, headers=push_headers, json={"payload": payload}, timeout=30)
-            print(f"推送结果: HTTP {res.status_code}")
+            print(f"⏳ 正在构建请求并发送...")
+            start_time = datetime.datetime.now()
+            # 注意：如果本地服务特别慢或者需要导入的数据特别大，可以适当放大 timeout，这里放大到 120 秒
+            res = requests.post(args.upload_url, headers=push_headers, json={"payload": payload}, timeout=120)
+            end_time = datetime.datetime.now()
+            cost_secs = (end_time - start_time).total_seconds()
+            print(f"✅ 推送请求完成！耗时: {cost_secs:.2f} 秒")
+            print(f"响应状态码: HTTP {res.status_code}")
             try:
-                print(json.dumps(res.json(), indent=2, ensure_ascii=False))
+                print("响应内容: " + json.dumps(res.json(), indent=2, ensure_ascii=False))
             except:
-                print(res.text[:2000])
+                print("响应内容(原始): " + res.text[:2000])
+        except requests.exceptions.Timeout:
+            print("❌ 推送超时！(等待了 120 秒没有响应)")
+            print("可能原因：")
+            print("1. 服务端导入数据过多，处理过慢。可以检查服务端日志看看是不是还在处理。")
+            print("2. 网络连通性问题。")
+        except requests.exceptions.ConnectionError:
+            print("❌ 连接被拒绝！")
+            print(f"请检查服务 {args.upload_url} 是否已启动并且可以通过该地址访问。")
+            if "127.0.0.1" in args.upload_url and "https://" in args.upload_url:
+                print("⚠️ 提示：你好像在本地使用了 https://127.0.0.1，如果是本地测试，通常应该是 http://127.0.0.1")
         except Exception as e:
-            print(f"推送异常: {e}")
+            print(f"❌ 推送发生未知异常: {e}")
 
 if __name__ == "__main__":
     main()
