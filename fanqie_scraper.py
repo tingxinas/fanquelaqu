@@ -312,7 +312,16 @@ def main():
             "Accept": "application/json"
         }
         if args.key:
-            push_headers["x-market-import-key"] = args.key
+            # 解决 'latin-1' 编码异常: HTTP Header 不能直接带非 ASCII 字符 (如果你不小心把密钥写了中文)
+            # 如果确实有中文或特殊字符，建议先 encode 或者只使用英文/数字密钥
+            safe_key = args.key
+            try:
+                safe_key.encode('latin-1')
+            except UnicodeEncodeError:
+                print("⚠️ 警告: 你提供的鉴权密钥包含非 ASCII 字符(如中文)，已尝试强制转码。如果服务端认证失败，请将 MARKET_IMPORT_PUSH_KEY 改为纯英数字符！")
+                safe_key = safe_key.encode('utf-8').decode('latin-1', errors='replace')
+                
+            push_headers["x-market-import-key"] = safe_key
             print(f"✅ 已携带 x-market-import-key 认证头")
             
         try:
