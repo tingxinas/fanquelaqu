@@ -1,0 +1,12 @@
+{
+  "name": "fanqielaqu",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Fanqie rank exporter (local) + quality report + optional POST push",
+  "scripts": {
+    "fanqie:export": "node scripts/fanqie-export.mjs",
+    "fanqie:push": "node scripts/fanqie-push.mjs",
+    "fanqie:import": "node scripts/fanqie-import.mjs"
+  }
+}
+
