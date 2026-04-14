@@ -135,9 +135,10 @@ def compute_report(snapshots):
 def main():
     parser = argparse.ArgumentParser(description="番茄小说排行榜本地抓取脚本 (Python)")
     parser.add_argument("--max", type=int, default=50, help="每个分类最大抓取数量 (默认: 50)")
-    parser.add_argument("--out", default="fanqie-snapshots.json", help="输出 JSON 文件路径")
+    parser.add_argument("--out", default="fanqie-snapshots.json", help="输出/读取 JSON 文件路径")
     parser.add_argument("--upload-url", help="推送接口 URL (可选)")
     parser.add_argument("--key", help="推送接口鉴权密钥 (x-market-import-key)")
+    parser.add_argument("--push-only", action="store_true", help="仅推送已存在的文件，不执行抓取")
     args = parser.parse_args()
 
     # 内置的分类列表，避免依赖外部 JSON 文件
@@ -182,99 +183,127 @@ def main():
     ]
 
     date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-    snapshots = []
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://fanqienovel.com/"
-    }
-
-    print(f"开始抓取 {len(categories)} 个分类...")
-    for cat in categories:
-        rank_key = cat.get("rankKey", "")
-        name = cat.get("name", "")
-        group = cat.get("group", "")
-        
-        empty_snapshot = {"rankKey": rank_key, "group": group, "name": name, "books": []}
-        if not rank_key.startswith("rank/"):
-            snapshots.append(empty_snapshot)
-            continue
-
-        url = f"https://fanqienovel.com/{rank_key}"
-        try:
-            res = requests.get(url, headers=headers, timeout=10)
-            if res.status_code != 200:
-                print(f"  [失败] {name} ({rank_key}) - HTTP {res.status_code}")
-                snapshots.append(empty_snapshot)
-                continue
-
-            html = res.text
-            state = extract_initial_state(html)
-            if not state:
-                print(f"  [失败] {name} ({rank_key}) - 无法解析 __INITIAL_STATE__")
-                snapshots.append(empty_snapshot)
-                continue
-            
-            book_list = state.get("rank", {}).get("book_list", [])
-            
-            # 使用配置的最大抓取数量
-            if args.max and args.max > 0:
-                book_list = book_list[:args.max]
-            
-            books = []
-            for i, b in enumerate(book_list):
-                platform_id = str(b.get("bookId", "")).strip()
-                if not platform_id: continue
-                
-                title = str(b.get("bookName", "")).strip() or "未知书名"
-                author = str(b.get("author", "")).strip() or "未知作者"
-                intro = str(b.get("abstract", "")).strip() or "暂无简介"
-                cover_url = normalize_image_url(b.get("thumbUri", ""))
-                
-                wc_str = b.get("wordNumber", "")
-                word_count = int(wc_str) if str(wc_str).isdigit() else None
-                
-                ok_cover = is_valid_cover_url(cover_url)
-                
-                books.append({
-                    "platformId": platform_id,
-                    "rank": i + 1,
-                    "isNew": True,
-                    "title": title,
-                    "author": author,
-                    "category": name,
-                    "intro": intro,
-                    "coverUrl": cover_url if ok_cover else "",
-                    "wordCount": word_count
-                })
-            
-            snapshots.append({
-                "rankKey": rank_key,
-                "group": group,
-                "name": name,
-                "books": books
-            })
-            print(f"  [成功] {name} ({rank_key}) - 抓取到 {len(books)} 本")
-        except Exception as e:
-            print(f"  [异常] {name} ({rank_key}) - {e}")
-            snapshots.append(empty_snapshot)
-
-    report = compute_report(snapshots)
-    payload = {"date": date_str, "snapshots": snapshots}
     
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
-        
-    report_out = args.out.replace(".json", ".report.json")
-    if report_out == args.out:
-        report_out = args.out + ".report.json"
-        
-    with open(report_out, "w", encoding="utf-8") as f:
-        report_data = {"date": date_str}
-        report_data.update(report)
-        json.dump(report_data, f, ensure_ascii=False, indent=2)
+    if args.push_only:
+        if not args.upload_url:
+            print("❌ 错误: --push-only 必须配合 --upload-url 使用")
+            sys.exit(1)
+            
+        print(f"模式: 仅推送已存在的数据 ({args.out})")
+        try:
+            with open(args.out, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+                
+            # 简单的格式校验
+            if "snapshots" not in payload:
+                print(f"❌ 错误: 读取到的 {args.out} 数据格式不正确 (缺失 snapshots 字段)")
+                sys.exit(1)
+                
+            print(f"✅ 成功读取到数据文件，共包含 {len(payload.get('snapshots', []))} 个分类")
+        except FileNotFoundError:
+            print(f"❌ 错误: 找不到文件 {args.out}。请先执行抓取命令，或指定正确的 --out 路径")
+            sys.exit(1)
+        except json.JSONDecodeError:
+            print(f"❌ 错误: {args.out} 不是合法的 JSON 格式")
+            sys.exit(1)
+        except Exception as e:
+            print(f"❌ 错误: 读取文件失败 {e}")
+            sys.exit(1)
+            
+    else:
+        snapshots = []
 
-    print(f"\n抓取完成! 数据已保存至 {args.out} 和 {report_out}")
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": "https://fanqienovel.com/"
+        }
+
+        print(f"开始抓取 {len(categories)} 个分类...")
+        for cat in categories:
+            rank_key = cat.get("rankKey", "")
+            name = cat.get("name", "")
+            group = cat.get("group", "")
+            
+            empty_snapshot = {"rankKey": rank_key, "group": group, "name": name, "books": []}
+            if not rank_key.startswith("rank/"):
+                snapshots.append(empty_snapshot)
+                continue
+
+            url = f"https://fanqienovel.com/{rank_key}"
+            try:
+                res = requests.get(url, headers=headers, timeout=10)
+                if res.status_code != 200:
+                    print(f"  [失败] {name} ({rank_key}) - HTTP {res.status_code}")
+                    snapshots.append(empty_snapshot)
+                    continue
+
+                html = res.text
+                state = extract_initial_state(html)
+                if not state:
+                    print(f"  [失败] {name} ({rank_key}) - 无法解析 __INITIAL_STATE__")
+                    snapshots.append(empty_snapshot)
+                    continue
+                
+                book_list = state.get("rank", {}).get("book_list", [])
+                
+                # 使用配置的最大抓取数量
+                if args.max and args.max > 0:
+                    book_list = book_list[:args.max]
+                
+                books = []
+                for i, b in enumerate(book_list):
+                    platform_id = str(b.get("bookId", "")).strip()
+                    if not platform_id: continue
+                    
+                    title = str(b.get("bookName", "")).strip() or "未知书名"
+                    author = str(b.get("author", "")).strip() or "未知作者"
+                    intro = str(b.get("abstract", "")).strip() or "暂无简介"
+                    cover_url = normalize_image_url(b.get("thumbUri", ""))
+                    
+                    wc_str = b.get("wordNumber", "")
+                    word_count = int(wc_str) if str(wc_str).isdigit() else None
+                    
+                    ok_cover = is_valid_cover_url(cover_url)
+                    
+                    books.append({
+                        "platformId": platform_id,
+                        "rank": i + 1,
+                        "isNew": True,
+                        "title": title,
+                        "author": author,
+                        "category": name,
+                        "intro": intro,
+                        "coverUrl": cover_url if ok_cover else "",
+                        "wordCount": word_count
+                    })
+                
+                snapshots.append({
+                    "rankKey": rank_key,
+                    "group": group,
+                    "name": name,
+                    "books": books
+                })
+                print(f"  [成功] {name} ({rank_key}) - 抓取到 {len(books)} 本")
+            except Exception as e:
+                print(f"  [异常] {name} ({rank_key}) - {e}")
+                snapshots.append(empty_snapshot)
+
+        report = compute_report(snapshots)
+        payload = {"date": date_str, "snapshots": snapshots}
+        
+        with open(args.out, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+            
+        report_out = args.out.replace(".json", ".report.json")
+        if report_out == args.out:
+            report_out = args.out + ".report.json"
+            
+        with open(report_out, "w", encoding="utf-8") as f:
+            report_data = {"date": date_str}
+            report_data.update(report)
+            json.dump(report_data, f, ensure_ascii=False, indent=2)
+
+        print(f"\n抓取完成! 数据已保存至 {args.out} 和 {report_out}")
 
     if args.upload_url:
         print(f"\n正在推送数据至: {args.upload_url} ...")
