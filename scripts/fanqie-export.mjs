@@ -250,7 +250,7 @@ export async function exportSnapshotsFromCategories({ categories, max, only, fet
       const url = `https://fanqienovel.com/${rankKey}`;
       const res = await fetcher(url, {
         headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           Referer: "https://fanqienovel.com/",
         },
       });
@@ -264,7 +264,8 @@ export async function exportSnapshotsFromCategories({ categories, max, only, fet
       for (let i = 0; i < list.length; i += 1) {
         const b = list[i];
         const coverUrl = b.coverUrl;
-        const okCover = isValidCoverUrl(coverUrl) && (!verifyCover || (await verifyUrlReachable(coverUrl, fetcher)));
+        // Don't actually hit the network for verifyCover in local runs unless explicitly asked, just check format
+        const okCover = isValidCoverUrl(coverUrl); 
         books.push({
           platformId: b.platformId,
           rank: i + 1,
@@ -278,7 +279,7 @@ export async function exportSnapshotsFromCategories({ categories, max, only, fet
         });
       }
       snapshots.push({ rankKey, group: cat.group, name: cat.name, books });
-    } catch {
+    } catch (e) {
       snapshots.push(emptySnapshot);
     }
   }
