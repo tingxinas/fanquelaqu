@@ -307,20 +307,17 @@ def main():
 
     if args.upload_url:
         print(f"\n正在推送数据至: {args.upload_url} ...")
+        
+        # 强制将所有传入的 header 值转为安全的 ASCII 字符串，去掉隐藏的不可见字符
+        safe_url = args.upload_url.strip().encode('ascii', errors='ignore').decode('ascii')
+        
         push_headers = {
             "Content-Type": "application/json; charset=utf-8",
             "Accept": "application/json"
         }
         if args.key:
-            # 解决 'latin-1' 编码异常: HTTP Header 不能直接带非 ASCII 字符 (如果你不小心把密钥写了中文)
-            # 如果确实有中文或特殊字符，建议先 encode 或者只使用英文/数字密钥
-            safe_key = args.key
-            try:
-                safe_key.encode('latin-1')
-            except UnicodeEncodeError:
-                print("⚠️ 警告: 你提供的鉴权密钥包含非 ASCII 字符(如中文)，已尝试强制转码。如果服务端认证失败，请将 MARKET_IMPORT_PUSH_KEY 改为纯英数字符！")
-                safe_key = safe_key.encode('utf-8').decode('latin-1', errors='replace')
-                
+            # 解决 'latin-1' 编码异常: 彻底剔除所有可能的非法字符(比如复制粘贴带来的零宽字符)
+            safe_key = args.key.strip().encode('ascii', errors='ignore').decode('ascii')
             push_headers["x-market-import-key"] = safe_key
             print(f"✅ 已携带 x-market-import-key 认证头")
             
@@ -328,7 +325,7 @@ def main():
             print(f"⏳ 正在构建请求并发送...")
             start_time = datetime.datetime.now()
             # 注意：如果本地服务特别慢或者需要导入的数据特别大，可以适当放大 timeout，这里放大到 120 秒
-            res = requests.post(args.upload_url, headers=push_headers, json={"payload": payload}, timeout=120)
+            res = requests.post(safe_url, headers=push_headers, json={"payload": payload}, timeout=120)
             end_time = datetime.datetime.now()
             cost_secs = (end_time - start_time).total_seconds()
             print(f"✅ 推送请求完成！耗时: {cost_secs:.2f} 秒")
